@@ -1,27 +1,28 @@
 breed [cows cow]
 breed [sheeps sheep]
 breed [camps camp]
-camps-own [life]
-globals [next-task]
+camps-own [life team]
+globals [next-task xclic yclic]
+cows-own[leader number life team]
+sheeps-own[leader number life team]
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;GAME LOOP;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 to setup
   clear-all
 
-; Création des camps /!\ les camps doivent être la premmière chose crée dans le setup pour garder la position 0 et 1
-  create-camps 2
-  set-default-shape camps "house"
-  ask camps [set size 4 set life 100 set label round life]
-  ask camp 0 [setxy 0 23 set color blue]
-  ask camp 1 [setxy 0 -23 set color red]
+;  /!\ les camps doivent être la premmière chose créé dans le setup pour garder la position 0 et 1
+  init-camps
 
+  ;ajout de toutes les armées
+  init-cows
+  init-sheeps
 
-  create-cows cows-numbers
-  set-default-shape cows "cow"
-  create-sheeps sheeps-numbers
-  set-default-shape sheeps "sheep"
-
-  set next-task [ -> manage-cow ]
+  ; action par défaut au lancement de l'application
+  set next-task [ -> manage cows ]
   reset-ticks
 end
 
@@ -29,35 +30,122 @@ to go
   run next-task
   tick
 end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;INTERFACE;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 to press-cow
- set next-task [ -> manage-cow ]
+ set next-task [ -> manage cows]
 end
 
 to press-sheep
- set next-task [ -> manage-sheep ]
+ set next-task [ -> manage sheeps ]
 end
 
-to manage-cow
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;INITIALISATION;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  ask cows [move]
-  ask cows [attack]
+;Création des camps
+to init-camps
+  create-camps 2
+  set-default-shape camps "house"
+  ;la team sert a expulser les camps des mécaniques
+  ask camps [set size 4 set life 100 set label round life set team "decor"]
+  ask camp 0 [setxy 0 23 set color blue]
+  ask camp 1 [setxy 0 -23 set color red]
+end
+
+;Création des vaches
+to init-cows
+  ;création des vaches (unité)
+  create-cows cows-numbers ;[setxy (-1 + random 40 / 10)  (-1 + random 40 / 10) ]
+  ask cows [set color pink set leader 0 set number cows-numbers set life 100 set label round life set team  "pink"]
+  set-default-shape cows "cow"
+  ;ajout d'un leader
+  create-leader cows
+  ;on place le leader à la pos 0 0
+  ask cows with [leader = 1] [setxy 0 0]
+end
+
+;création des moutons
+to init-sheeps
+   create-sheeps sheeps-numbers
+  set-default-shape sheeps "sheep"
+  ask sheeps [set color green set leader 0 set number sheeps-numbers set life 100 set label round life set team  "green"]
+  create-leader sheeps
+end
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;FUNCTIONS;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;lance les actions propres à l'armée
+to manage[army]
+
+  ask army [
+    ifelse leader = 1 ; on vérifie si c'est le leader (c'est le seul qu'on peut déplacer, les autres unités suivent en fonction des desires/intentions)
+    [set_corr move]
+    [unstack_army army 0.8 go_near_leader army 0.2]
+  ]
+
+  ;toutes les entités doivent attaquer en même temps peut importe qui est controllé
+  ;/!\ les camps sont compter comme des turtles il faut une exception pour eux
+  ask turtles with[team != "decor"] [attack]
+
   tick
 end
 
-to manage-sheep
-  ask sheeps [move]
-  ask sheeps [attack]
-  tick
+;création du leader
+to create-leader [army]
+; on prend une unité aléatoirement et on la passe à la couleur du leader
+  let new_leader one-of army
+  if new_leader != nobody
+  [
+  ask new_leader [set color blue set leader 1]
+  ]
 end
-;Cliquer sur l'écran permet de déplacer les vaches en l'endroit du clic
-to move
+
+
+
+
+to unstack_army [army deplacement]
+ ask army [
+    ;ne s'applique pas au leader
+    if leader != 1
+    ; les tortues du même armée ne doivent pas se marcher dessus (à l'exeception du leader pour avoir une fluidité)
+    [if any? other turtles-here with [leader = 0]  with [team = [team] of myself]
+      ;si 2 tortue sont l'une sur l'autre elle tourne de manière aléatoire puis avance (s'éloigne l'une de l'autre puis recommence a suivre le leader)
+      [face one-of army with [leader = 1] rt random 360 fd deplacement display]]
+  ]
+end
+
+to go_near_leader [army deplacement]
+
+  if distance one-of army with [leader = 1] > 2
+  [
+    let an_agent_not_leader min-one-of other army with [leader = 0] [distance myself]
+    if an_agent_not_leader != NOBODY[
+    if [leader] of an_agent_not_leader = 0 [
+      face one-of army with [leader = 1]
+    ]
+    fd deplacement display
+    ]
+  ]
+end
+
+
+;enregistre le clic a l'ecran
+to set_corr
     if mouse-down?
   [
-    let xclic round mouse-xcor
-    let yclic round mouse-ycor
-    facexy (xclic) (yclic)
-    while [patch-here != patch xclic yclic] [ fd 0.2 display] ; and pcolor != blue
+    set xclic round mouse-xcor
+    set yclic round mouse-ycor
   ]
+end
+
+;déplace les vaches a l'endroit du clic
+to move
+ if patch-here != patch xclic yclic and leader = 1
+   [facexy (xclic) (yclic)
+    fd 0.2 display]
 end
 
 ;Lorsque qu'une vache se trouve sur un camp celui ci prend des dommages
@@ -69,7 +157,7 @@ to attack
     ask camp 0 [
       set life life - 1  set label round life]
     ]
-    [user-message (word "les rougess ont gagné " self )]; afficher la victoire des rouges
+    [user-message (word "les rouges ont gagné " self )]; afficher la victoire des rouges
   ]
 
   ;camp2(rouge)
@@ -80,6 +168,13 @@ to attack
       set life life - 1  set label round life]
     ]
     [user-message (word "les bleus ont gagné " self )]; afficher la victoire des bleus
+  ]
+
+  ;on attaque les unités ennemies
+  let armySet other turtles-here with [team != [team] of myself]
+  if any? armySet
+  [
+    ask armySet[set life life - 1 set label round life]
   ]
 
 end
@@ -187,8 +282,8 @@ SLIDER
 cows-numbers
 cows-numbers
 0
-100
-17.0
+10
+4.0
 1
 1
 NIL
@@ -202,8 +297,8 @@ SLIDER
 sheeps-numbers
 sheeps-numbers
 0
-100
-14.0
+10
+4.0
 1
 1
 NIL
