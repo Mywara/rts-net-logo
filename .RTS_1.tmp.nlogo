@@ -124,6 +124,8 @@ to go_near_leader [army deplacement]
 
   if distance one-of army with [leader = 1] > 2
   [
+
+
     face one-of army with [leader = 1]
     fd deplacement display
   ]
