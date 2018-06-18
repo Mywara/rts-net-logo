@@ -57,19 +57,19 @@ end
 to init-cows
   ;création des vaches (unité)
   create-cows cows-numbers ;[setxy (-1 + random 40 / 10)  (-1 + random 40 / 10) ]
-  ask cows [set color pink set leader 0 set number cows-numbers set life 100 set label round life set team  "cow" set dead "non"]
+  ask cows [setxy -5 0 set color pink set leader 0 set number cows-numbers set life 100 set label round life set team  "cow" set dead "non"]
   set-default-shape cows "cow"
   ;ajout d'un leader
   create-leader cows
   ;on place le leader à la pos 0 0
-  ask cows with [leader = 1] [setxy 0 0]
+  ask cows with [leader = 1] [setxy -5 0]
 end
 
 ;création des moutons
 to init-sheeps
    create-sheeps sheeps-numbers
   set-default-shape sheeps "sheep"
-  ask sheeps [set color green set leader 0 set number sheeps-numbers set life 100 set label round life set team  "sheep" set dead "non"]
+  ask sheeps [setxy 5 0 set color green set leader 0 set number sheeps-numbers set life 100 set label round life set team  "sheep" set dead "non"]
   create-leader sheeps
 end
 
@@ -181,12 +181,14 @@ to attack
   ]
 end
 
+;permet de passer une unité en leader
 to re_create_leader[army]
   ifelse any? army with [leader = 1]
   []
   [create-leader army print "new leader"]
 end
 
+;gère la mort des unités et des leaders
 to deadf
   ifelse leader = 0
   [ set dead "oui" die]
