@@ -1,7 +1,9 @@
 breed [cows cow]
 breed [sheeps sheep]
 breed [camps camp]
-camps-own [life team]
+breed [towers tower]
+camps-own [life team leader dead]
+towers-own [life team leader dead]
 globals [next-task xclic yclic]
 cows-own[leader number life team dead]
 sheeps-own[leader number life team dead]
@@ -16,6 +18,7 @@ to setup
 
 ;  /!\ les camps doivent être la premmière chose créé dans le setup pour garder la position 0 et 1
   init-camps
+  init-tower
 
   ;ajout de toutes les armées
   init-cows
@@ -26,6 +29,7 @@ to setup
   reset-ticks
 end
 
+
 to go
   run next-task
   tick
@@ -33,6 +37,7 @@ end
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;INTERFACE;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;permet de changer de tâche
 to press-cow
  set next-task [ -> manage cows]
 end
@@ -48,28 +53,38 @@ to init-camps
   create-camps 2
   set-default-shape camps "house"
   ;la team sert a expulser les camps des mécaniques
-  ask camps [set size 4 set life 100 set label round life set team "decor"]
-  ask camp 0 [setxy 0 23 set color blue]
-  ask camp 1 [setxy 0 -23 set color red]
+  ask camps [set size 4 set life 100 set label round life set leader 2 set dead "non"] ;leader 2 indique que c'est un bojet unique
+  ask camp 0 [setxy 0 23 set color blue set team "sheep"]
+  ask camp 1 [setxy 0 -23 set color red set team "cow"]
+end
+
+to init-tower
+  create-towers 4
+  set-default-shape towers "chess rook"
+  ask towers [set size 4 set life 50 set label round life set team "decor" set leader 2 set dead "non"]
+  ask tower 2 [setxy -10 12]
+  ask tower 3 [setxy -10 -15]
+  ask tower 4 [setxy 10 12]
+  ask tower 5 [setxy 10 -15]
 end
 
 ;Création des vaches
 to init-cows
   ;création des vaches (unité)
-  create-cows cows-numbers ;[setxy (-1 + random 40 / 10)  (-1 + random 40 / 10) ]
-  ask cows [setxy -5 0 set color pink set leader 0 set number cows-numbers set life 100 set label round life set team  "cow" set dead "non"]
+  create-cows cows-numbers
+  ask cows [setxy 0 -19 set color pink set leader 0 set number cows-numbers set life 100 set label round life set team  "cow" set dead "non"]
   set-default-shape cows "cow"
   ;ajout d'un leader
   create-leader cows
   ;on place le leader à la pos 0 0
-  ask cows with [leader = 1] [setxy -5 0]
+  ;ask cows with [leader = 1] [setxy -5 0]
 end
 
 ;création des moutons
 to init-sheeps
    create-sheeps sheeps-numbers
   set-default-shape sheeps "sheep"
-  ask sheeps [setxy 5 0 set color green set leader 0 set number sheeps-numbers set life 100 set label round life set team  "sheep" set dead "non"]
+  ask sheeps [setxy 0 19 set color green set leader 0 set number sheeps-numbers set life 100 set label round life set team  "sheep" set dead "non"]
   create-leader sheeps
 end
 
@@ -82,13 +97,16 @@ to manage[army]
 
   ask army [
     ifelse leader = 1 ; on vérifie si c'est le leader (c'est le seul qu'on peut déplacer, les autres unités suivent en fonction des desires/intentions)
-    [set_corr move]
-    [unstack_army army 0.8 go_near_leader army 0.2]
+    [set_corr move] ;on récupère le clic de la souris et on déplace le leader
+    [unstack_army army 0.8  ; on empeche les unité de se stacker puis elle choissisent une action
+     choose_action army  other turtles with [team != [team] of myself] 0.2
+    ]
   ]
 
   ;toutes les entités doivent attaquer en même temps peut importe qui est controllé
   ;/!\ les camps sont compter comme des turtles il faut une exception pour eux
-  ask turtles with[team != "decor"] [attack]
+  ask cows [attack]
+  ask sheeps[attack]
 
   ;on verifie si il reste un leader dans chaque team sinon on en recréer un (pas optimisé mais règle le bug de maniere rapide)
   re_create_leader cows
@@ -96,19 +114,7 @@ to manage[army]
   tick
 end
 
-;création du leader
-to create-leader [army]
-; on prend une unité aléatoirement et on la passe à la couleur du leader
-  let new_leader one-of army
-  if new_leader != nobody
-  [
-  ask new_leader [set color blue set leader 1]
-  ]
-end
-
-
-
-
+;empêche 2 unités d'etre sur la même case (pour des raisons de visibilité)
 to unstack_army [army deplacement]
  ask army [
     ;ne s'applique pas au leader
@@ -120,15 +126,23 @@ to unstack_army [army deplacement]
   ]
 end
 
-to go_near_leader [army deplacement]
-
-  if distance one-of army with [leader = 1] > 2
+to choose_action [army adverse_army deplacement]
+  ;si on est a proximité d'un adversaire et pas trop loin du leader on attaque
+  ;si on detecte un adversaire dans un cercle de 3 et que le leader est a une distance de max 6
+  ifelse distance min-one-of adverse_army [distance(myself)] < 3 and distance one-of army with [leader = 1] < 6
   [
-    face one-of army with [leader = 1]
+    face min-one-of adverse_army [distance(myself)]
     fd deplacement display
   ]
+   [
+    ;si on est trop loin du leader et qu'on a pas d'autre objectif, on se rapproche
+    if distance one-of army with [leader = 1] > 2
+    [
+      face one-of army with [leader = 1]
+      fd deplacement display
+    ]
+  ]
 end
-
 
 ;enregistre le clic a l'ecran
 to set_corr
@@ -146,10 +160,10 @@ to move
     fd 0.2 display]
 end
 
-;Lorsque qu'une vache se trouve sur un camp celui ci prend des dommages
+;Lorsque qu'une unité se trouve sur un camp ou une unité celui ci prend des dommages
 to attack
   ;camp1 (bleu)
-  if [pxcor] of patch-here > -2 and [pxcor] of patch-here < 2 and [pycor] of patch-here > 20 and [pycor] of patch-here < 25
+  if [pxcor] of patch-here > -2 and [pxcor] of patch-here < 2 and [pycor] of patch-here > 20 and [pycor] of patch-here < 25 and team != "sheep"
   [
     ifelse [life] of camp 0 > 0 [
     ask camp 0 [
@@ -159,7 +173,7 @@ to attack
   ]
 
   ;camp2(rouge)
-    if [pxcor] of patch-here > -2 and [pxcor] of patch-here < 2 and [pycor] of patch-here < -20 and [pycor] of patch-here > -25
+    if [pxcor] of patch-here > -2 and [pxcor] of patch-here < 2 and [pycor] of patch-here < -20 and [pycor] of patch-here > -25 and team != "cow"
   [
     ifelse [life] of camp 1 > 0 [
     ask camp 1 [
@@ -185,7 +199,17 @@ end
 to re_create_leader[army]
   ifelse any? army with [leader = 1]
   []
-  [create-leader army print "new leader"]
+  [create-leader army]
+end
+
+;création du leader
+to create-leader [army]
+; on prend une unité aléatoirement et on la passe à la couleur du leader
+  let new_leader one-of army
+  if new_leader != nobody
+  [
+  ask new_leader [set color blue set leader 1]
+  ]
 end
 
 ;gère la mort des unités et des leaders
@@ -416,6 +440,20 @@ Circle -16777216 true false 30 180 90
 Polygon -16777216 true false 162 80 132 78 134 135 209 135 194 105 189 96 180 89
 Circle -7500403 true true 47 195 58
 Circle -7500403 true true 195 195 58
+
+chess rook
+false
+0
+Rectangle -7500403 true true 90 255 210 300
+Line -16777216 false 75 255 225 255
+Rectangle -16777216 false false 90 255 210 300
+Polygon -7500403 true true 90 255 105 105 195 105 210 255
+Polygon -16777216 false false 90 255 105 105 195 105 210 255
+Rectangle -7500403 true true 75 90 120 60
+Rectangle -7500403 true true 75 84 225 105
+Rectangle -7500403 true true 135 90 165 60
+Rectangle -7500403 true true 180 90 225 60
+Polygon -16777216 false false 90 105 75 105 75 60 120 60 120 84 135 84 135 60 165 60 165 84 179 84 180 60 225 60 225 105
 
 circle
 false
